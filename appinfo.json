@@ -1,0 +1,56 @@
+{
+    "appKeys": {},
+    "capabilities": [
+        ""
+    ],
+    "companyName": "Zen Design Software",
+    "enableMultiJS": true,
+    "longName": "Zen Smart Tracker",
+    "projectType": "native",
+    "resources": {
+        "media": [
+            {
+                "file": "images/charge.png",
+                "name": "CHARGE",
+                "targetPlatforms": [
+                    "basalt"
+                ],
+                "type": "bitmap"
+            },
+            {
+                "file": "images/tick.png",
+                "name": "TICK",
+                "targetPlatforms": [
+                    "basalt"
+                ],
+                "type": "bitmap"
+            },
+            {
+                "file": "images/cross.png",
+                "name": "CROSS",
+                "targetPlatforms": [
+                    "basalt"
+                ],
+                "type": "bitmap"
+            },
+            {
+                "file": "images/confirm.png",
+                "name": "CONFIRM",
+                "targetPlatforms": [
+                    "basalt"
+                ],
+                "type": "bitmap"
+            }
+        ]
+    },
+    "sdkVersion": "3",
+    "shortName": "ZenTracker",
+    "targetPlatforms": [
+        "basalt"
+    ],
+    "uuid": "0dc4709e-4498-4c3a-804a-1fa83307e9a5",
+    "versionLabel": "1.0",
+    "watchapp": {
+        "watchface": false
+    }
+}
