@@ -8,7 +8,6 @@ static Layer *s_window_layer, *s_dots_layer, *s_progress_layer, *s_average_layer
 static TextLayer *s_time_layer, *s_step_layer;
 static TextLayer *s_conn_status_layer;
 static TextLayer *s_data_layer;
-static StatusBarLayer *s_status_bar;
 
 struct endpoint
 {
@@ -461,11 +460,6 @@ static void data_text_hide()
 static void prv_main_window_load(Window *window) {
 
 	GRect window_bounds = layer_get_bounds(s_window_layer);
-
-	s_status_bar = status_bar_layer_create();
-	status_bar_layer_set_separator_mode(s_status_bar, StatusBarLayerSeparatorModeDotted);
-	status_bar_layer_set_colors(s_status_bar, GColorDarkGreen, GColorWhite);
-	layer_add_child(s_window_layer, status_bar_layer_get_layer(s_status_bar));
 
 	s_conn_status_layer = text_layer_create(GRect(0, 56, 144, 80));
 	text_layer_set_font(s_conn_status_layer, fonts_get_system_font(FONT_KEY_GOTHIC_28));
