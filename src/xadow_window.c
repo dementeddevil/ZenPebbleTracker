@@ -61,6 +61,10 @@ static int s_step_count = 0, s_step_goal = 0, s_step_average = 0;
 // time data
 static char s_current_time_buffer[8];
 
+// color information
+GColor color_loser;
+GColor color_winner;
+
 // is health step data available
 static bool step_data_is_available() {
 	return HealthServiceAccessibilityMaskAvailable &
@@ -88,6 +92,9 @@ static void get_step_average() {
 }
 
 static void display_step_count() {
+	int thousands = s_step_count / 1000;
+	int hundreds = s_step_count % 1000;
+
 	if (thousands > 0) {
 		snprintf(s_current_steps_buffer, sizeof(s_current_steps_buffer),
 			"%d,%03d", thousands, hundreds);
@@ -453,6 +460,8 @@ static void data_text_hide()
 
 static void prv_main_window_load(Window *window) {
 
+	GRect window_bounds = layer_get_bounds(s_window_layer);
+
 	s_status_bar = status_bar_layer_create();
 	status_bar_layer_set_separator_mode(s_status_bar, StatusBarLayerSeparatorModeDotted);
 	status_bar_layer_set_colors(s_status_bar, GColorDarkGreen, GColorWhite);
@@ -476,9 +485,7 @@ static void prv_main_window_load(Window *window) {
 	layer_add_child(s_window_layer, text_layer_get_layer(s_data_layer));
 
 	data_text_hide();
-
-	GRect window_bounds = layer_get_bounds(s_window_layer);
-
+	
 	// Dots for the progress indicator
 	s_dots_layer = layer_create(window_bounds);
 	layer_set_update_proc(s_dots_layer, dots_layer_update_proc);
@@ -523,6 +530,11 @@ static void prv_main_window_load(Window *window) {
 static void prv_main_window_unload(Window *window) {
 	text_layer_destroy(s_conn_status_layer);
 	text_layer_destroy(s_data_layer);
+	layer_destroy(text_layer_get_layer(s_time_layer));
+	layer_destroy(text_layer_get_layer(s_step_layer));
+	layer_destroy(s_dots_layer);
+	layer_destroy(s_progress_layer);
+	layer_destroy(s_average_layer);
 }
 
 static void up_click_handler(ClickRecognizerRef recognizer, void *context) {
@@ -556,20 +568,24 @@ static void click_config_provider(void *context) {
 }
 
 static void prv_init(void) {
+	color_loser = GColorPictonBlue;
+	color_winner = GColorJaegerGreen;
+
 	s_main_window = window_create();
 	s_window_layer = window_get_root_layer(s_main_window);
 
-	window_set_click_config_provider_with_context(s_main_window, click_config_provider, NULL);
+	//window_set_click_config_provider_with_context(s_main_window, click_config_provider, NULL);
 	window_set_window_handlers(s_main_window, (WindowHandlers) {
 		.load = prv_main_window_load,
-			.unload = prv_main_window_unload
+		.unload = prv_main_window_unload
 	});
 	window_stack_push(s_main_window, true);
+
 	SmartstrapHandlers handlers = (SmartstrapHandlers) {
 		.availability_did_change = prv_availablility_status_changed,
-			.did_write = prv_did_write,
-			.did_read = prv_did_read,
-			.notified = prv_notified
+		.did_write = prv_did_write,
+		.did_read = prv_did_read,
+		.notified = prv_notified
 	};
 	smartstrap_subscribe(handlers);
 	smartstrap_set_timeout(500);
@@ -602,6 +618,7 @@ static void prv_init(void) {
 	readable_end_points[num_endpoints++].available = true;
 
 	app_timer_register(1000, check_connection, NULL);
+	tick_timer_service_subscribe(MINUTE_UNIT, tick_handler);
 }
 
 static void prv_deinit(void) {
