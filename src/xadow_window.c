@@ -4,6 +4,8 @@
 #include "xadow.h"
 
 static Window *s_main_window;
+static Layer *s_window_layer, *s_dots_layer, *s_progress_layer, *s_average_layer;
+static TextLayer *s_time_layer, *s_step_layer;
 static TextLayer *s_conn_status_layer;
 static TextLayer *s_data_layer;
 static StatusBarLayer *s_status_bar;
@@ -52,6 +54,109 @@ static void data_text_show();
 static void data_text_hide();
 void format_number(int32_t input, int input_precision, char *output, int output_precision);
 
+// health
+static char s_current_steps_buffer[16];
+static int s_step_count = 0, s_step_goal = 0, s_step_average = 0;
+
+// time data
+static char s_current_time_buffer[8]; 
+
+// is health step data available
+static bool step_data_is_available() {
+    return HealthServiceAccessibilityMaskAvailable &
+        health_service_metric_accessible(HealthMetricStepCount,
+                                        time_start_of_today(), time(NULL));
+}
+
+// Daily step goal
+static void get_step_goal() {
+    const time_t start = time_start_of_today();
+    const time_t end = start + SECONDS_PER_DAY;
+    s_step_goal = (int)health_service_sum_averaged(
+        HealthMetricStepCount, start, end, HealthServiceTimeScopeDaily);
+}
+
+static void get_step_count() {
+    s_step_count = (int)health_service_sum_today(HealthMetricStepCount);
+}
+
+static void get_step_average() {
+    const time_t start = time_start_of_today();
+    const time_t end = time(NULL);
+    s_step_average = (int)health_service_sum_averaged(HealthMetricStepCount,
+        start, end, HealthServiceTimeScopeDaily);        
+}
+
+static void display_step_count() {
+    if(thousands > 0) {
+        snprintf(s_current_steps_buffer, sizeof(s_current_steps_buffer),
+            "%d,%03d", thousands, hundreds);
+    } else {
+        snprintf(s_current_steps_buffer, sizeof(s_current_steps_buffer),
+            "%d", hundreds);
+    }
+
+    text_layer_set_text(s_step_layer, s_current_steps_buffer);
+}
+
+static void health_handler(HealthEventType event, void *context) {
+    if(event == HealthEventSignificantUpdate) {
+        get_step_goal();
+    }
+
+    if(event != HealthEventSleepUpdate) {
+        get_step_count();
+        get_step_average();
+        display_step_count();
+        layer_mark_dirty(s_progress_layer);
+        layer_mark_dirty(s_average_layer);
+    }
+}
+
+static void tick_handler(struct tm *tick_time, TimeUnits changed) {
+  strftime(s_current_time_buffer, sizeof(s_current_time_buffer),
+           clock_is_24h_style() ? "%H:%M" : "%l:%M", tick_time);
+
+  text_layer_set_text(s_time_layer, s_current_time_buffer);
+}
+
+static void dots_layer_update_proc(Layer *layer, GContext *ctx) {
+  const GRect inset = grect_inset(layer_get_bounds(layer), GEdgeInsets(6));
+
+  const int num_dots = 12;
+  for(int i = 0; i < num_dots; i++) {
+    GPoint pos = gpoint_from_polar(inset, GOvalScaleModeFitCircle,
+      DEG_TO_TRIGANGLE(i * 360 / num_dots));
+    graphics_context_set_fill_color(ctx, GColorDarkGray);
+    graphics_fill_circle(ctx, pos, 2);
+  }
+}
+
+static void progress_layer_update_proc(Layer *layer, GContext *ctx) {
+  const GRect inset = grect_inset(layer_get_bounds(layer), GEdgeInsets(2));
+
+  graphics_context_set_fill_color(ctx,
+    s_step_count >= s_step_average ? color_winner : color_loser);
+
+  graphics_fill_radial(ctx, inset, GOvalScaleModeFitCircle, 12,
+    DEG_TO_TRIGANGLE(0),
+    DEG_TO_TRIGANGLE(360 * (s_step_count / s_step_goal)));
+}
+
+static void average_layer_update_proc(Layer *layer, GContext *ctx) {
+  if(s_step_average < 1) {
+    return;
+  }
+
+  const GRect inset = grect_inset(layer_get_bounds(layer), GEdgeInsets(2));
+  graphics_context_set_fill_color(ctx, GColorYellow);
+
+  int trigangle = DEG_TO_TRIGANGLE(360 * s_step_average / s_step_goal);
+  int line_width_trigangle = 1000;
+  // draw a very narrow radial (it's just a line)
+  graphics_fill_radial(ctx, inset, GOvalScaleModeFitCircle, 12,
+    trigangle - line_width_trigangle, trigangle);
+}
 
 static char* smartstrap_result_to_string(SmartstrapResult result) {
   switch(result) {
@@ -343,7 +448,7 @@ static void prv_main_window_load(Window *window) {
   s_status_bar = status_bar_layer_create();
   status_bar_layer_set_separator_mode(s_status_bar, StatusBarLayerSeparatorModeDotted);
   status_bar_layer_set_colors(s_status_bar, GColorDarkGreen, GColorWhite);
-  layer_add_child(window_get_root_layer(window), status_bar_layer_get_layer(s_status_bar));
+  layer_add_child(s_window_layer, status_bar_layer_get_layer(s_status_bar));
 
   s_conn_status_layer = text_layer_create(GRect(0, 56, 144, 80));
   text_layer_set_font(s_conn_status_layer, fonts_get_system_font(FONT_KEY_GOTHIC_28));
@@ -352,16 +457,15 @@ static void prv_main_window_load(Window *window) {
   text_layer_set_background_color(s_conn_status_layer, GColorClear);
   text_layer_set_text_alignment(s_conn_status_layer, GTextAlignmentCenter);
   text_layer_set_overflow_mode(s_conn_status_layer, GTextOverflowModeWordWrap);
-  layer_add_child(window_get_root_layer(window), text_layer_get_layer(s_conn_status_layer));
+  layer_add_child(s_window_layer, text_layer_get_layer(s_conn_status_layer));
 
   s_data_layer = text_layer_create(GRect(0, 10, 144, 160));
   text_layer_set_font(s_data_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18));
-  //update_data_text();
   text_layer_set_text_color(s_data_layer, GColorBlack);
   text_layer_set_background_color(s_data_layer, GColorClear);
   text_layer_set_text_alignment(s_data_layer, GTextAlignmentLeft);
   text_layer_set_overflow_mode(s_data_layer, GTextOverflowModeWordWrap);
-  layer_add_child(window_get_root_layer(window), text_layer_get_layer(s_data_layer));
+  layer_add_child(s_window_layer, text_layer_get_layer(s_data_layer));
 
   data_text_hide();
 }
@@ -403,6 +507,8 @@ static void click_config_provider(void *context) {
 
 static void prv_init(void) {
   s_main_window = window_create();
+  s_window_layer = window_get_root_layer(s_main_window);
+    
   window_set_click_config_provider_with_context(s_main_window, click_config_provider, NULL);
   window_set_window_handlers(s_main_window, (WindowHandlers) {
     .load = prv_main_window_load,

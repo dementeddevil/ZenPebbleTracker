@@ -1,7 +1,7 @@
 {
     "appKeys": {},
     "capabilities": [
-        ""
+        "health"
     ],
     "companyName": "Zen Design Software",
     "enableMultiJS": true,
@@ -51,6 +51,6 @@
     "uuid": "0dc4709e-4498-4c3a-804a-1fa83307e9a5",
     "versionLabel": "1.0",
     "watchapp": {
-        "watchface": false
+        "watchface": true
     }
 }
